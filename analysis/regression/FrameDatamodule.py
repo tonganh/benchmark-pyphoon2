@@ -6,12 +6,14 @@ from torchvision.transforms.functional import center_crop
 
 from pathlib import Path
 import numpy as np
-
+import sys
 from pyphoon2.DigitalTyphoonDataset import DigitalTyphoonDataset
+import math
 
 
 class TyphoonDataModule(pl.LightningDataModule):
     """Typhoon Dataset Module using lightning architecture"""
+
     def __init__(
         self,
         dataroot,
@@ -25,6 +27,9 @@ class TyphoonDataModule(pl.LightningDataModule):
         downsample_size,
         cropped,
         corruption_ceiling_pct=100,
+        image_dirs=None,
+        metadata_dirs=None,
+        metadata_jsons=None
     ):
         super().__init__()
 
@@ -44,6 +49,10 @@ class TyphoonDataModule(pl.LightningDataModule):
         self.downsample_size = downsample_size
         self.cropped = cropped
 
+        self.image_dirs = image_dirs
+        self.metadata_dirs = metadata_dirs
+        self.metadata_jsons = metadata_jsons
+
         self.corruption_ceiling_pct = corruption_ceiling_pct
 
     def setup(self, stage):
@@ -56,14 +65,28 @@ class TyphoonDataModule(pl.LightningDataModule):
             load_data_into_memory=self.load_data,
             filter_func=self.image_filter,
             transform_func=self.transform_func,
-            spectrum="Infrared",
             verbose=False,
+            image_dirs=self.image_dirs,
+            metadata_dirs=self.metadata_dirs,
+            metadata_jsons=self.metadata_jsons,
         )
         # generator1 = torch.Generator().manual_seed(3)
-
+        
+        if not hasattr(self, 'dataset_split') or not self.dataset_split:
+            self.dataset_split = [0.8, 0.2, 0.0]  # default split ratios
+        
+        # Ensure split ratios sum to 1
+        if not math.isclose(sum(self.dataset_split), 1.0):
+            print("WARNING: Split ratios don't sum to 1, normalizing...")
+            total = sum(self.dataset_split)
+            self.dataset_split = [x/total for x in self.dataset_split]
+        
         self.train_set, self.val_set, _ = dataset.random_split(
-            self.dataset_split, split_by=self.split_by, #generator=generator1
+            self.dataset_split, split_by=self.split_by
         )
+        
+        print(f"Train set size: {len(self.train_set)}")
+        print(f"Val set size: {len(self.val_set)}")
 
     def train_dataloader(self):
         return DataLoader(
@@ -71,6 +94,8 @@ class TyphoonDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
+            persistent_workers=True,
+            pin_memory=False
         )
 
     def val_dataloader(self):
@@ -79,6 +104,8 @@ class TyphoonDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=False,
+            persistent_workers=True,
+            pin_memory=False
         )
 
     def image_filter(self, image):
@@ -103,7 +130,8 @@ class TyphoonDataModule(pl.LightningDataModule):
                 image_batch = center_crop(image_batch, (224, 224))
             else:
                 image_batch = torch.reshape(
-                    image_batch, [1, 1, image_batch.size()[0], image_batch.size()[1]]
+                    image_batch, [1, 1, image_batch.size()[0],
+                                  image_batch.size()[1]]
                 )
                 image_batch = nn.functional.interpolate(
                     image_batch,

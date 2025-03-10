@@ -16,7 +16,25 @@ if __name__ == "__main__":
     parser.add_argument("--cropped")
     parser.add_argument("--device")
     parser.add_argument("--labels")
+    parser.add_argument("--image_dirs", action="append", help="List of image directories (can specify multiple)")
+    parser.add_argument("--metadata_dirs", action="append", help="List of metadata directories (can specify multiple)")
+    parser.add_argument("--metadata_jsons", action="append", help="List of metadata JSON files (can specify multiple)")
     args = parser.parse_args()
+
+    # Make sure all path arguments are defined
+    if not hasattr(args, 'image_dirs') or args.image_dirs is None:
+        args.image_dirs = []
+    if not hasattr(args, 'metadata_dirs') or args.metadata_dirs is None:
+        args.metadata_dirs = []
+    if not hasattr(args, 'metadata_jsons') or args.metadata_jsons is None:
+        args.metadata_jsons = []
+        
+    print(f"Using {len(args.image_dirs)} image directories, {len(args.metadata_dirs)} metadata directories, and {len(args.metadata_jsons)} metadata JSONs")
+    
+    # Check if any directories are specified
+    if len(args.image_dirs) == 0 and len(args.metadata_dirs) == 0 and len(args.metadata_jsons) == 0:
+        print("WARNING: No image or metadata directories specified. The dataset will be empty!")
+        print("Use --image_dirs, --metadata_dirs, or --metadata_jsons arguments to specify data sources.")
 
     # Pipeline launched for 5 sessions training 
     for i in range(5):

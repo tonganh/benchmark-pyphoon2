@@ -49,6 +49,7 @@ class LightningClassifModel(pl.LightningModule):
         self.predicted_labels = []
 
     def forward(self, images):
+        breakpoint()
         images = torch.Tensor(images).float()
         images = torch.reshape(
             images, [images.size()[0], 1, images.size()[1], images.size()[2]]

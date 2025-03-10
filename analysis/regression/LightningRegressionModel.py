@@ -7,33 +7,36 @@ import pytorch_lightning as pl
 
 class LightningRegressionModel(pl.LightningModule):
     """Resnet Module using lightning architecture"""
-    def __init__(self, learning_rate, weights, num_classes, model_name):
+    def __init__(self, learning_rate, weights, num_classes, model_name, in_channels=3):
         super().__init__()
         self.save_hyperparameters()
+
+        print("model_name", model_name)
+        print(f"Using {in_channels} input channels")
 
         if model_name == "resnet18" : 
             self.model = resnet18(weights=weights)
             self.model.fc = nn.Linear(in_features=512, out_features=num_classes, bias=True)
             self.model.conv1 = nn.Conv2d(
-                1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
+                in_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
             )
         if model_name == "resnet50" : 
             self.model = resnet50(weights=weights)
             self.model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
             self.model.conv1 = nn.Conv2d(
-                1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
+                in_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
             )
         if model_name == "resnet101" : 
             self.model = resnet101(weights=weights)
             self.model.fc = nn.Linear(in_features=2048, out_features=num_classes, bias=True)
             self.model.conv1 = nn.Conv2d(
-                1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
+                in_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
             )
         if model_name == "vgg" :
             self.model = vgg16_bn(num_classes=num_classes, weights=weights)
-            self.model.features[0]= nn.Conv2d(1,64,kernel_size=(3,3),stride=(1,1),padding=(1,1))
-            self.model.features[-1]=nn.AdaptiveMaxPool2d(7*7)
-            self.model.classifier[-1]=nn.Linear(in_features = 4096, out_features=1, bias = True)
+            self.model.features[0] = nn.Conv2d(in_channels, 64, kernel_size=(3,3), stride=(1,1), padding=(1,1))
+            self.model.features[-1] = nn.AdaptiveMaxPool2d(7*7)
+            self.model.classifier[-1] = nn.Linear(in_features=4096, out_features=1, bias=True)
 
         self.learning_rate = learning_rate
         self.loss_fn = nn.MSELoss()
@@ -44,10 +47,32 @@ class LightningRegressionModel(pl.LightningModule):
         self.predicted_labels = []
 
     def forward(self, images):
+        """
+        Forward pass for the model handling both single-channel and multi-channel inputs
+        
+        :param images: Input tensor which may be in various formats
+        :return: Model output
+        """
         images = torch.Tensor(images).float()
-        images = torch.reshape(
-            images, [images.size()[0], 1, images.size()[1], images.size()[2]]
-        )
+        
+        # Handle different input formats explicitly
+        if len(images.shape) == 3:  # [batch, height, width]
+            # This is single-channel data - reshape to [batch, 1, height, width]
+            images = images.unsqueeze(1)  # Add channel dimension
+            print(f"Reshaped single-channel input from {images.shape[0]}×{images.shape[2]}×{images.shape[3]} to {images.shape[0]}×{images.shape[1]}×{images.shape[2]}×{images.shape[3]}")
+        
+        # Check that channel count matches the expected input channels
+        num_channels = images.shape[1]
+        expected_channels = self.model.conv1.in_channels
+        
+        if num_channels != expected_channels:
+            print(f"WARNING: Channel mismatch - Input has {num_channels} channels but model expects {expected_channels} channels")
+            if num_channels == 1 and expected_channels > 1:
+                # Repeat the single channel to match expected channels
+                images = images.repeat(1, expected_channels, 1, 1)
+                print(f"Automatically adjusted single-channel input to {expected_channels} channels by repeating")
+        
+        # Pass through model
         output = self.model(images)
         return output
 
